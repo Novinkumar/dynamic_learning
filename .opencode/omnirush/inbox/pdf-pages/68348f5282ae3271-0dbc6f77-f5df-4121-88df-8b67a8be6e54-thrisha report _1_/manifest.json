@@ -1,0 +1,116 @@
+{
+  "version": 3,
+  "sha256": "68348f5282ae3271b53b56b2b3fbb74a93c5cc0ba65be889d089e5c5ac97ad2e",
+  "filename": "0dbc6f77-f5df-4121-88df-8b67a8be6e54-thrisha report _1_.pdf",
+  "pageCount": 60,
+  "textPages": 60,
+  "textBudgetExhausted": false,
+  "pagesWithoutText": [
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    59
+  ],
+  "renderedPages": [
+    {
+      "page": 1,
+      "width": 1110,
+      "height": 1568,
+      "bytes": 255697,
+      "mime": "image/png",
+      "fileName": "page-001.png"
+    },
+    {
+      "page": 2,
+      "width": 1110,
+      "height": 1568,
+      "bytes": 131126,
+      "mime": "image/png",
+      "fileName": "page-002.png"
+    },
+    {
+      "page": 3,
+      "width": 1110,
+      "height": 1568,
+      "bytes": 171325,
+      "mime": "image/png",
+      "fileName": "page-003.png"
+    },
+    {
+      "page": 4,
+      "width": 1110,
+      "height": 1568,
+      "bytes": 177301,
+      "mime": "image/png",
+      "fileName": "page-004.png"
+    },
+    {
+      "page": 5,
+      "width": 1110,
+      "height": 1568,
+      "bytes": 102212,
+      "mime": "image/png",
+      "fileName": "page-005.png"
+    },
+    {
+      "page": 6,
+      "width": 1110,
+      "height": 1568,
+      "bytes": 109279,
+      "mime": "image/png",
+      "fileName": "page-006.png"
+    },
+    {
+      "page": 7,
+      "width": 1110,
+      "height": 1568,
+      "bytes": 54738,
+      "mime": "image/png",
+      "fileName": "page-007.png"
+    },
+    {
+      "page": 8,
+      "width": 1110,
+      "height": 1568,
+      "bytes": 23798,
+      "mime": "image/png",
+      "fileName": "page-008.png"
+    },
+    {
+      "page": 9,
+      "width": 1110,
+      "height": 1568,
+      "bytes": 212493,
+      "mime": "image/png",
+      "fileName": "page-009.png"
+    },
+    {
+      "page": 10,
+      "width": 1110,
+      "height": 1568,
+      "bytes": 214443,
+      "mime": "image/png",
+      "fileName": "page-010.png"
+    },
+    {
+      "page": 11,
+      "width": 1110,
+      "height": 1568,
+      "bytes": 202749,
+      "mime": "image/png",
+      "fileName": "page-011.png"
+    },
+    {
+      "page": 12,
+      "width": 1110,
+      "height": 1568,
+      "bytes": 24529,
+      "mime": "image/png",
+      "fileName": "page-012.png"
+    }
+  ],
+  "renderBudgetExhausted": true
+}

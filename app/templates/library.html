@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+{% block title %}Resource library · Dynamic Learning{% endblock %}
+{% block content %}
+{% set resource_list = resources|default([]) %}
+{% set selected_topic = selected_topic|default(request.args.get('topic', ''))|string %}
+{% set selected_kind = selected_kind|default(request.args.get('kind', '')) %}
+{% set query = query|default(request.args.get('q', '')) %}
+{% set learner = user|default(current_user|default(none)) %}
+{% set completed_ids = completed_resource_ids|default(learner.completions|default([])|map(attribute='resource_id')|list) %}
+{% set formats = resource_kinds|default(['explanation','practice','advanced','article','video','exercise','course']) %}
+<div class="page-wrap">
+  <div class="page-heading"><div><p class="eyebrow">EXPLORE WITH INTENT</p><h1>Make room for<br><em>understanding.</em></h1><p class="lead muted">A resource for every next step. Filter by topic and format, then record what you’ve completed.</p></div><a class="button button-secondary" href="{{ url_for('dashboard.dashboard') }}">Back to your overview →</a></div>
+  <form class="library-tools" method="get" action="{{ url_for('learning.library') }}" data-library-filter>
+    <label class="search-field" for="resource-search"><span>SEARCH RESOURCES</span><input id="resource-search" name="q" value="{{ query }}" placeholder="Search titles and topics…" type="search" data-library-search></label>
+    <label for="topic-filter">TOPIC<select id="topic-filter" name="topic"><option value="">All topics</option>{% for topic in topics|default([]) %}<option value="{{ topic.id }}" {% if selected_topic == topic.id|string %}selected{% endif %}>{{ topic.name }}</option>{% endfor %}</select></label>
+    <label for="kind-filter">RESOURCE KIND<select id="kind-filter" name="kind"><option value="">All kinds</option>{% for kind in formats %}<option value="{{ kind }}" {% if selected_kind == kind %}selected{% endif %}>{{ kind|replace('_',' ')|title }}</option>{% endfor %}</select></label>
+    <button class="button button-primary" type="submit">Apply filters</button><a class="text-link clear-filters" href="{{ url_for('learning.library') }}">Clear filters</a>
+  </form>
+  <div class="library-summary"><p role="status" data-library-count><strong>{{ resource_list|length }}</strong> resource{{ '' if resource_list|length == 1 else 's' }} in this view</p><span class="muted">Open a resource, learn at your pace, then mark it complete.</span></div>
+  <div class="resource-grid" data-library-grid>
+    {% for resource in resource_list %}
+    {% set is_complete = resource.id in completed_ids or resource.completed|default(false) %}
+    <article class="resource-card" data-resource-card="{{ resource.id }}" data-search-text="{{ (resource.title ~ ' ' ~ resource.topic.name|default(resource.topic) ~ ' ' ~ resource.kind ~ ' ' ~ resource.description|default(''))|lower }}">
+      <div class="resource-cover {{ resource.kind }}"><span aria-hidden="true">{{ '▷' if resource.kind == 'video' else '↗' if resource.kind in ['practice','exercise','advanced'] else '▤' }}</span><small>{{ resource.kind|replace('_',' ')|upper }}</small><span class="completion-badge" data-completed-badge {% if not is_complete %}hidden{% endif %}>Completed ✓</span></div>
+      <div class="resource-card-body"><div class="tag-row"><span class="tag">{{ resource.topic.name|default(resource.topic) }}</span>{% if resource.estimated_minutes is defined %}<span class="muted">{{ resource.estimated_minutes }} min</span>{% endif %}</div><h2>{{ resource.title }}</h2>{% if resource.description|default('') %}<p class="resource-description">{{ resource.description }}</p>{% endif %}<p class="resource-meta">Difficulty {{ resource.difficulty }} · {{ resource.kind|replace('_',' ')|title }}</p>
+        <div class="card-actions"><a href="{{ resource.url }}" target="_blank" rel="noopener noreferrer" class="text-link">Open resource ↗<span class="sr-only">: {{ resource.title }} (opens in a new tab)</span></a><form method="post" action="{{ url_for('learning.complete', resource_id=resource.id) }}" data-complete data-resource-id="{{ resource.id }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button-secondary button-small" type="submit" {% if is_complete %}disabled{% endif %}>{{ 'Completed ✓' if is_complete else 'Mark complete' }}<span class="sr-only">: {{ resource.title }}</span></button><p class="form-feedback" role="status"></p></form></div>
+      </div>
+    </article>
+    {% else %}<div class="empty-state library-empty"><span class="empty-icon" aria-hidden="true">⌕</span><h2>No resources in this view.</h2><p>Try another topic or resource kind. If your catalog is empty, run the seed script to add learning resources.</p><a class="button button-secondary" href="{{ url_for('learning.library') }}">Clear filters</a></div>{% endfor %}
+  </div>
+  <div class="empty-state library-empty" data-search-empty hidden><span class="empty-icon" aria-hidden="true">⌕</span><h2>No matching resources.</h2><p>Try a shorter search or clear the topic and kind filters.</p><a class="button button-secondary" href="{{ url_for('learning.library') }}">Clear filters</a></div>
+  <noscript><p class="notice">Topic and kind filters work without JavaScript. Completion submits to the server and may display a JSON confirmation. Search within this view requires JavaScript unless enabled by the backend.</p></noscript>
+</div>
+{% endblock %}

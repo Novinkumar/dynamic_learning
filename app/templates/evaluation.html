@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% block title %}Evaluation · Dynamic Learning{% endblock %}
+{% block content %}
+{% set offline = metrics.offline|default({}) %}
+{% set adaptive = offline.algorithms.adaptive|default({}) %}
+{% set baseline = offline.algorithms.stable_baseline|default({}) %}
+{% set content = offline.algorithms.content_based|default({}) %}
+<div class="page-wrap">
+  <div class="page-heading">
+    <div><p class="eyebrow">ADMIN · EVIDENCE OVER ASSUMPTIONS</p><h1>Recommendation <em>evaluation.</em></h1><p class="muted">Observed learner activity is separated from a reproducible offline benchmark.</p></div>
+    <a class="button button-secondary" href="{{ url_for('evaluation.evaluation_api') }}">View JSON ↗</a>
+  </div>
+
+  <section class="metric-grid" aria-label="Observed application metrics">
+    <article class="metric-card accent"><span class="metric-label">OBSERVED QUIZ ATTEMPTS</span><strong>{{ metrics.attempts|default(0) }}</strong><span class="trend neutral">Real records in this local database</span></article>
+    <article class="metric-card"><span class="metric-label">MEAN QUIZ SCORE</span><strong>{{ (metrics.mean_score|default(0) * 100)|round(1) }}<small>%</small></strong><span class="trend neutral">Descriptive, not causal</span></article>
+    <article class="metric-card"><span class="metric-label">CATALOG COMPLETION COVERAGE</span><strong>{{ (metrics.completion_rate|default(0) * 100)|round(1) }}<small>%</small></strong><span class="trend neutral">Unique completed resources / catalog</span></article>
+    <article class="metric-card"><span class="metric-label">OFFLINE TEST CASES</span><strong>{{ offline.dataset_size|default(0) }}</strong><span class="trend neutral">{{ offline.synthetic_vs_real|default('unavailable')|title }} benchmark cases</span></article>
+  </section>
+
+  <section class="panel" aria-labelledby="comparison-title">
+    <div class="panel-header"><div><p class="eyebrow">REPRODUCIBLE OFFLINE BENCHMARK</p><h2 id="comparison-title">Three ranking methods</h2><p class="muted">Adaptive, content-based, and stable-catalog rankers use the same catalog, eligible candidate pool, cutoff K={{ offline.k|default(5) }}, and test cases.</p></div><span class="tag tag-green">{{ offline.synthetic_vs_real|default('Unavailable')|upper }}</span></div>
+    {% if offline.dataset.labeled_cases|default(0) %}
+    <div class="table-scroll"><table><caption class="sr-only">Offline ranking metric comparison</caption><thead><tr><th scope="col">Metric</th><th scope="col">Adaptive</th><th scope="col">Content-based</th><th scope="col">Stable baseline</th></tr></thead><tbody>
+      <tr><th scope="row">Precision@{{ offline.k }}</th><td>{{ (adaptive.precision_at_k * 100)|round(1) }}%</td><td>{{ (content.precision_at_k * 100)|round(1) }}%</td><td>{{ (baseline.precision_at_k * 100)|round(1) }}%</td></tr>
+      <tr><th scope="row">Recall@{{ offline.k }}</th><td>{{ (adaptive.recall_at_k * 100)|round(1) }}%</td><td>{{ (content.recall_at_k * 100)|round(1) }}%</td><td>{{ (baseline.recall_at_k * 100)|round(1) }}%</td></tr>
+      <tr><th scope="row">NDCG@{{ offline.k }}</th><td>{{ (adaptive.ndcg_at_k * 100)|round(1) }}%</td><td>{{ (content.ndcg_at_k * 100)|round(1) }}%</td><td>{{ (baseline.ndcg_at_k * 100)|round(1) }}%</td></tr>
+      <tr><th scope="row">Coverage</th><td>{{ (adaptive.coverage * 100)|round(1) }}%</td><td>{{ (content.coverage * 100)|round(1) }}%</td><td>{{ (baseline.coverage * 100)|round(1) }}%</td></tr>
+      <tr><th scope="row">Mean ranking runtime</th><td>{{ (adaptive.mean_runtime_seconds * 1000)|round(3) }} ms</td><td>{{ (content.mean_runtime_seconds * 1000)|round(3) }} ms</td><td>{{ (baseline.mean_runtime_seconds * 1000)|round(3) }} ms</td></tr>
+    </tbody></table></div>
+    {% else %}
+      <p class="muted">Ranking metrics are unavailable because this dataset has no explicit relevance labels. The application does not infer relevance from clicks, completions, or quiz scores.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel" aria-labelledby="scenario-title"><div class="panel-header"><div><p class="eyebrow">SCENARIO RESULTS</p><h2 id="scenario-title">Results by learner situation</h2><p class="muted">Per-scenario metrics are calculated only where that scenario has explicit relevance labels.</p></div></div>
+    {% if offline.scenarios|default({}) %}<div class="table-scroll"><table><caption class="sr-only">Per-scenario precision, recall, and NDCG results</caption><thead><tr><th scope="col">Scenario</th><th scope="col">Adaptive P/R/N</th><th scope="col">Content P/R/N</th><th scope="col">Stable P/R/N</th></tr></thead><tbody>{% for name, scenario in offline.scenarios.items() %}{% set a = scenario.metrics.adaptive %}{% set c = scenario.metrics.content_based %}{% set b = scenario.metrics.stable_baseline %}<tr><th scope="row">{{ name|replace('_',' ')|title }}<small class="muted"><br>{{ scenario.label_rule }}</small></th><td>{{ (a.precision_at_k * 100)|round(1) if a.precision_at_k is not none else 'N/A' }} / {{ (a.recall_at_k * 100)|round(1) if a.recall_at_k is not none else 'N/A' }} / {{ (a.ndcg_at_k * 100)|round(1) if a.ndcg_at_k is not none else 'N/A' }}</td><td>{{ (c.precision_at_k * 100)|round(1) if c.precision_at_k is not none else 'N/A' }} / {{ (c.recall_at_k * 100)|round(1) if c.recall_at_k is not none else 'N/A' }} / {{ (c.ndcg_at_k * 100)|round(1) if c.ndcg_at_k is not none else 'N/A' }}</td><td>{{ (b.precision_at_k * 100)|round(1) if b.precision_at_k is not none else 'N/A' }} / {{ (b.recall_at_k * 100)|round(1) if b.recall_at_k is not none else 'N/A' }} / {{ (b.ndcg_at_k * 100)|round(1) if b.ndcg_at_k is not none else 'N/A' }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="muted">No scenario labels are available.</p>{% endif %}
+    <p class="fine-print">Each cell is Precision / Recall / NDCG at the displayed K. These are ranking metrics against constructed scenario labels, not measures of learning gain.</p>
+  </section>
+
+  <div class="insight-grid">
+    <section class="panel"><p class="eyebrow">DATASET PROVENANCE</p><h2>{{ offline.dataset.name|default('No offline dataset loaded') }}</h2>
+      <dl class="definition-list">
+        <dt>Source</dt><dd>{{ offline.synthetic_vs_real|default('unavailable')|title }}{% if offline.dataset.synthetic|default(false) %} · constructed test data, not learner outcomes{% endif %}</dd>
+        <dt>Catalog size</dt><dd>{{ offline.catalog_size|default(0) }} resources</dd>
+        <dt>Test cases</dt><dd>{{ offline.dataset_size|default(0) }} total · {{ offline.dataset.labeled_cases|default(0) }} labeled</dd>
+        <dt>Interaction histories</dt><dd>{{ offline.dataset.interaction_count|default(0) }}</dd>
+        <dt>Cutoff</dt><dd>K={{ offline.k|default(5) }}</dd>
+        <dt>Label provenance</dt><dd>{{ offline.dataset.label_provenance|default('Not available') }}</dd>
+      </dl>
+      <p class="fine-print">These benchmark metrics describe ranking against the declared labels only. They do not demonstrate improved learning, retention, or educational effectiveness.</p>
+    </section>
+    <section class="panel"><p class="eyebrow">ASSUMPTIONS</p><h2>Read the result carefully</h2>
+      <ul class="definition-list assumption-list">{% for assumption in offline.assumptions|default([]) %}<li>{{ assumption }}</li>{% else %}<li>No assumptions are available.</li>{% endfor %}</ul>
+    </section>
+  </div>
+
+  <section class="panel" aria-labelledby="cases-title"><div class="panel-header"><div><p class="eyebrow">KNOWN LABELS</p><h2 id="cases-title">Evaluation test cases</h2></div><span class="muted">Labels are declared before ranking</span></div>
+    {% if offline.cases|default([]) %}<div class="table-scroll"><table><caption class="sr-only">Offline cases, history size, candidate count, and known relevant resources</caption><thead><tr><th scope="col">Case</th><th scope="col">History</th><th scope="col">Eligible catalog</th><th scope="col">Relevant resource IDs</th></tr></thead><tbody>{% for case in offline.cases %}<tr><th scope="row">{{ case.case_id }}</th><td>{{ case.history_size }}</td><td>{{ case.candidate_resource_ids|length }}</td><td>{% if case.relevant_resource_ids %}{{ case.relevant_resource_ids|join(', ') }}{% else %}Not labeled{% endif %}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="muted">No catalog is available. Run the seed script before evaluating.</p>{% endif %}
+  </section>
+
+  <section class="panel"><p class="eyebrow">OBSERVED DATA CONTEXT</p><h2>What this page does not claim</h2><p class="muted">Observed quiz attempts and resource completion describe this local demonstration database. The offline dataset is synthetic and intentionally labeled as such. Neither source is evidence of causal learning improvement. A future learner study should use consent, a pre-test, post-test, delayed retention test, and a pre-registered comparison condition.</p></section>
+</div>
+{% endblock %}

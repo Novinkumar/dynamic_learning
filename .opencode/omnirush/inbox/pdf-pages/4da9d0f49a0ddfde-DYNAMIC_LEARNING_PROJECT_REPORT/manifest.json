@@ -1,0 +1,172 @@
+{
+  "version": 3,
+  "sha256": "4da9d0f49a0ddfde97fdbe73c6576b7fd5bdd512f1c8bd32f4f610f59006e423",
+  "filename": "DYNAMIC_LEARNING_PROJECT_REPORT.pdf",
+  "pageCount": 43,
+  "textPages": 43,
+  "textBudgetExhausted": false,
+  "pagesWithoutText": [],
+  "renderedPages": [
+    {
+      "page": 1,
+      "width": 1108,
+      "height": 1566,
+      "bytes": 96345,
+      "mime": "image/png",
+      "fileName": "page-001.png"
+    },
+    {
+      "page": 2,
+      "width": 1108,
+      "height": 1566,
+      "bytes": 107862,
+      "mime": "image/png",
+      "fileName": "page-002.png"
+    },
+    {
+      "page": 3,
+      "width": 1108,
+      "height": 1566,
+      "bytes": 73307,
+      "mime": "image/png",
+      "fileName": "page-003.png"
+    },
+    {
+      "page": 4,
+      "width": 1108,
+      "height": 1566,
+      "bytes": 183862,
+      "mime": "image/png",
+      "fileName": "page-004.png"
+    },
+    {
+      "page": 5,
+      "width": 1108,
+      "height": 1566,
+      "bytes": 146313,
+      "mime": "image/png",
+      "fileName": "page-005.png"
+    },
+    {
+      "page": 6,
+      "width": 1108,
+      "height": 1566,
+      "bytes": 132582,
+      "mime": "image/png",
+      "fileName": "page-006.png"
+    },
+    {
+      "page": 7,
+      "width": 1108,
+      "height": 1566,
+      "bytes": 40919,
+      "mime": "image/png",
+      "fileName": "page-007.png"
+    },
+    {
+      "page": 8,
+      "width": 1108,
+      "height": 1566,
+      "bytes": 48316,
+      "mime": "image/png",
+      "fileName": "page-008.png"
+    },
+    {
+      "page": 9,
+      "width": 1108,
+      "height": 1566,
+      "bytes": 266431,
+      "mime": "image/png",
+      "fileName": "page-009.png"
+    },
+    {
+      "page": 10,
+      "width": 1108,
+      "height": 1566,
+      "bytes": 155778,
+      "mime": "image/png",
+      "fileName": "page-010.png"
+    },
+    {
+      "page": 11,
+      "width": 1108,
+      "height": 1566,
+      "bytes": 331579,
+      "mime": "image/png",
+      "fileName": "page-011.png"
+    },
+    {
+      "page": 12,
+      "width": 1108,
+      "height": 1566,
+      "bytes": 80748,
+      "mime": "image/png",
+      "fileName": "page-012.png"
+    },
+    {
+      "page": 13,
+      "width": 1108,
+      "height": 1566,
+      "bytes": 273954,
+      "mime": "image/png",
+      "fileName": "page-013.png"
+    },
+    {
+      "page": 14,
+      "width": 1108,
+      "height": 1566,
+      "bytes": 195727,
+      "mime": "image/png",
+      "fileName": "page-014.png"
+    },
+    {
+      "page": 15,
+      "width": 1108,
+      "height": 1566,
+      "bytes": 201244,
+      "mime": "image/png",
+      "fileName": "page-015.png"
+    },
+    {
+      "page": 16,
+      "width": 1108,
+      "height": 1566,
+      "bytes": 232497,
+      "mime": "image/png",
+      "fileName": "page-016.png"
+    },
+    {
+      "page": 17,
+      "width": 1108,
+      "height": 1566,
+      "bytes": 156960,
+      "mime": "image/png",
+      "fileName": "page-017.png"
+    },
+    {
+      "page": 18,
+      "width": 1108,
+      "height": 1566,
+      "bytes": 231457,
+      "mime": "image/png",
+      "fileName": "page-018.png"
+    },
+    {
+      "page": 19,
+      "width": 1108,
+      "height": 1566,
+      "bytes": 178164,
+      "mime": "image/png",
+      "fileName": "page-019.png"
+    },
+    {
+      "page": 20,
+      "width": 1108,
+      "height": 1566,
+      "bytes": 203207,
+      "mime": "image/png",
+      "fileName": "page-020.png"
+    }
+  ],
+  "renderBudgetExhausted": false
+}
