@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+{% block title %}AI Practice Studio · Dynamic Learning{% endblock %}
+{% block content %}
+{% set selected = selected_topic_id %}
+{% set current = topics|selectattr('id','equalto',selected)|list %}
+{% set current = current[0] if current else (topics[0] if topics else none) %}
+<div class="practice-page">
+  <section class="ai-hero" aria-labelledby="ai-hero-title">
+    <div class="ai-hero-copy">
+      <p class="eyebrow hero-eyebrow"><span class="pulse-dot" aria-hidden="true"></span> AI PRACTICE STUDIO</p>
+      <h1 id="ai-hero-title">Never memorise<br><em>the same quiz twice.</em></h1>
+      <p class="hero-lead">Generate {{ default_length }}–20 fresh Python questions every time, tuned to your topic mastery. Every answer includes an explanation and updates your learning path.</p>
+      <div class="hero-chips" aria-label="AI practice features">
+        <span>✧ {{ ai_default_length if ai_default_length is defined else default_length }}+ questions</span>
+        <span>◎ Adaptive difficulty</span>
+        <span>✓ Instant feedback</span>
+      </div>
+    </div>
+    <div class="ai-orb" aria-hidden="true">
+      <span class="orb-ring ring-one"></span><span class="orb-ring ring-two"></span>
+      <span class="orb-core">AI</span>
+      <span class="orb-note note-one">new set</span><span class="orb-note note-two">adaptive</span><span class="orb-note note-three">explained</span>
+    </div>
+    <div class="hero-status {% if provider.live %}live{% endif %}">
+      <span class="status-dot" aria-hidden="true"></span>
+      <div><strong>{{ provider.label }}</strong><small>{{ provider.model }}</small></div>
+    </div>
+  </section>
+
+  <div class="practice-layout">
+    <section class="panel generator-panel" aria-labelledby="generator-title">
+      <div class="panel-header">
+        <div><p class="eyebrow">BUILD YOUR SESSION</p><h2 id="generator-title">Create a fresh quiz</h2><p class="muted">One click creates a private quiz you can submit once. Generate another set whenever you are ready.</p></div>
+        <span class="tag tag-green">FRESH EVERY TIME</span>
+      </div>
+      {% if topics %}
+      <form method="post" action="{{ url_for('learning.generate_practice') }}" class="generator-form" data-generate-quiz>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="field-grid">
+          <label class="field"><span>Topic</span>
+            <select name="topic_id" data-topic-select required>
+              {% for topic in topics %}<option value="{{ topic.id }}" {% if topic.id == selected %}selected{% endif %}>{{ topic.name }}{% if not topic.offline_supported and not provider.live %} · needs live AI{% endif %}</option>{% endfor %}
+            </select>
+          </label>
+          <label class="field"><span>Questions</span>
+            <select name="length" data-length-select>
+              {% for length in lengths %}<option value="{{ length }}" {% if length == default_length %}selected{% endif %}>{{ length }} questions</option>{% endfor %}
+            </select>
+          </label>
+          <label class="field field-wide"><span>Difficulty</span>
+            <select name="difficulty">
+              {% for value, label_text in difficulties %}<option value="{{ value }}" {% if value == 'adaptive' %}selected{% endif %}>{{ label_text }}</option>{% endfor %}
+            </select>
+          </label>
+        </div>
+        <div class="generation-note"><span aria-hidden="true">↻</span><p>Recent prompts are skipped automatically. Your answers are graded on the server and never exposed before submission.</p></div>
+        <button class="button button-ai button-wide" type="submit"><span data-generate-label>Generate my quiz</span> <span aria-hidden="true">✦</span></button>
+        <p class="form-feedback" role="status" data-generate-status></p>
+      </form>
+      {% else %}
+      <div class="empty-state"><span class="empty-icon" aria-hidden="true">✦</span><h3>No topics available yet.</h3><p>Run <code>python seed.py</code> to add the Python learning catalog, then return here to generate practice.</p><a class="button button-secondary" href="{{ url_for('learning.library') }}">Open library</a></div>
+      {% endif %}
+    </section>
+
+    <aside class="practice-sidebar">
+      <section class="panel signal-panel" aria-labelledby="signal-title">
+        <div class="signal-top"><p class="eyebrow">YOUR ADAPTIVE SIGNAL</p><span class="signal-spark" aria-hidden="true">✧</span></div>
+        <h2 id="signal-title" data-signal-topic>{{ current.name if current else 'No topic selected' }}</h2>
+        <div class="signal-ring-wrap">
+          <div class="signal-ring" data-signal-ring style="--value: {{ (current.mastery * 100)|round|int if current else 0 }}">
+            <div><strong data-signal-mastery>{{ (current.mastery * 100)|round|int if current else 0 }}%</strong><small>mastery</small></div>
+          </div>
+          <div class="signal-meta">
+            <p><span>Status</span><strong data-signal-status>{{ 'Assessed' if current and current.assessed else 'Not assessed' }}</strong></p>
+            <p><span>Latest score</span><strong data-signal-score>{{ (current.latest_score * 100)|round|int ~ '%' if current and current.latest_score is not none else 'No attempt' }}</strong></p>
+            <p><span>Suggested level</span><strong data-signal-level>{{ current.suggested_difficulty|title if current else '—' }}</strong></p>
+          </div>
+        </div>
+        <p class="signal-reason" data-signal-reason>{{ current.difficulty_reason if current else 'Choose a topic to see how adaptive difficulty is selected.' }}</p>
+        <p class="fine-print">Mastery is an estimate from recorded quiz evidence, not a grade or a prediction.</p>
+      </section>
+
+      <section class="panel provider-panel" aria-labelledby="provider-title">
+        <p class="eyebrow">GENERATION MODE</p><h2 id="provider-title">How the AI works</h2>
+        <p>{{ provider.description }}</p>
+        {% if not provider.live %}
+        <div class="provider-tip"><strong>Want true LLM questions?</strong><p>Set <code>AI_API_KEY</code> (and optionally <code>AI_API_BASE</code> / <code>AI_MODEL</code>) in your environment. The app works offline until then.</p></div>
+        {% endif %}
+        <p class="fine-print">Every generated question is validated for four distinct options, one answer, and an explanation before it reaches you.</p>
+      </section>
+    </aside>
+  </div>
+
+  <section class="practice-steps" aria-labelledby="steps-title">
+    <div class="section-heading"><div><p class="eyebrow">A SMARTER PRACTICE LOOP</p><h2 id="steps-title">Three steps, a stronger signal</h2></div><span class="muted">Designed for retrieval practice, not rote memorisation</span></div>
+    <div class="step-grid">
+      <article><span class="step-icon">01</span><h3>Generate</h3><p>Choose a topic and length. Adaptive mode selects foundation, core, or stretch questions from your current mastery.</p></article>
+      <article><span class="step-icon">02</span><h3>Answer & reflect</h3><p>Work through a focused wizard, jump between questions, and review anything you skipped before submitting.</p></article>
+      <article><span class="step-icon">03</span><h3>Learn & adapt</h3><p>Read concise explanations, see skills to review, and watch your recommendation queue respond to the new evidence.</p></article>
+    </div>
+  </section>
+
+  {% if sessions %}
+  <section class="panel sessions-panel" aria-labelledby="sessions-title">
+    <div class="panel-header"><div><p class="eyebrow">YOUR RECENT AI SESSIONS</p><h2 id="sessions-title">Fresh sets you have created</h2></div><a class="text-link" href="{{ url_for('dashboard.dashboard', _anchor='quiz-history') }}">View full history →</a></div>
+    <div class="session-grid">
+      {% for session in sessions %}
+      <article class="session-card">
+        <div class="session-head"><span class="tag">{{ session.topic }}</span><span class="session-score {% if session.score is not none and session.score < 0.65 %}low{% endif %}">{% if session.score is not none %}{{ (session.score * 100)|round|int }}%{% else %}Not submitted{% endif %}</span></div>
+        <h3>{{ session.title }}</h3>
+        <p class="muted">{{ session.question_count }} questions · {{ session.mode|title }} · {{ session.provider }}</p>
+        <div class="session-foot"><time>{% if session.created_at and session.created_at.strftime is defined %}{{ session.created_at.strftime('%d %b, %H:%M') }}{% else %}Recently{% endif %}</time>{% if session.score is none and not session.completed_at %}<a class="text-link" href="{{ url_for('learning.quiz_page', quiz_id=session.id) }}">Continue →</a>{% else %}<a class="text-link" href="{{ url_for('learning.practice_studio', topic=session.topic_id) }}">New set →</a>{% endif %}</div>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+</div>
+<script type="application/json" id="practice-topic-data">{{ topics|tojson }}</script>
+{% endblock %}

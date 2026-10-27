@@ -62,4 +62,6 @@ def create_app(config_object=None):
 
     with app.app_context():
         db.create_all()
+        from .services.schema import ensure_schema
+        ensure_schema()
     return app

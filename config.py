@@ -8,6 +8,14 @@ UNSAFE_SECRET_KEYS = {
 }
 
 
+def _env_int(name, default, minimum, maximum):
+    """Read a bounded integer setting without making startup brittle."""
+    try:
+        return max(minimum, min(maximum, int(os.environ.get(name, default))))
+    except (TypeError, ValueError):
+        return default
+
+
 class Config:
     """Runtime defaults that keep a fresh local checkout easy to run.
 
@@ -29,6 +37,16 @@ class Config:
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_SECURE = APP_ENV == "production" or os.environ.get("SESSION_COOKIE_SECURE", "0") == "1"
 
+    # Optional live AI quiz generation. The application remains fully usable
+    # without a key: it falls back to a local, validated question generator.
+    # Any OpenAI-compatible Chat Completions endpoint can be configured.
+    AI_API_KEY = os.environ.get("AI_API_KEY") or os.environ.get("OPENAI_API_KEY", "")
+    AI_API_BASE = os.environ.get("AI_API_BASE", "https://api.openai.com/v1").rstrip("/")
+    AI_MODEL = os.environ.get("AI_MODEL", "gpt-4o-mini")
+    AI_TIMEOUT = _env_int("AI_TIMEOUT", 25, 5, 90)
+    AI_QUIZ_DEFAULT_LENGTH = _env_int("AI_QUIZ_DEFAULT_LENGTH", 10, 5, 20)
+    AI_QUIZ_MAX_LENGTH = max(AI_QUIZ_DEFAULT_LENGTH, _env_int("AI_QUIZ_MAX_LENGTH", 20, 8, 20))
+
 
 class TestingConfig(Config):
     TESTING = True
@@ -38,3 +56,7 @@ class TestingConfig(Config):
     SESSION_COOKIE_SECURE = False
     WTF_CSRF_ENABLED = False
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+    # Tests never contact a live provider unless they explicitly opt in.
+    AI_API_KEY = ""
+    AI_QUIZ_DEFAULT_LENGTH = 10
+    AI_QUIZ_MAX_LENGTH = 20

@@ -109,6 +109,12 @@ QUIZ_QUESTIONS = {
 
 
 def question_explanation(question):
+    # Generated questions carry their own teacher-written/model-written
+    # explanation. Curated questions keep the original lookup so existing
+    # databases without the explanation column still receive feedback.
+    stored = (getattr(question, "explanation", "") or "").strip()
+    if stored:
+        return stored
     for questions in QUIZ_QUESTIONS.values():
         for prompt, _, answer, explanation in questions:
             if prompt == question.prompt and answer == question.answer:

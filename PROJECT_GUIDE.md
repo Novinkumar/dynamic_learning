@@ -47,7 +47,7 @@ Many learning-resource systems recommend content without identifying the exact t
 | Difficulty identifying specific weak topics | Topic-wise attempts are stored; assessed topics below the code constant of 65% are listed as weak. This is a prototype threshold, not a validated cut point. |
 | Revision needs may be overlooked | Attempts influence EMA; low latest scores have explanations. Completed resources become eligible again after the 14-day code constant. There is no validated forgetting model or separate repeated-mistake/decline detector in the current ranker. |
 | Prerequisite knowledge may be missing | `Prerequisite` records explicitly connect topics, and unmet prerequisite mastery reduces a resource priority and appears in its explanation. |
-| Advanced models may require high computing resources | The recommender is deterministic, database-backed, explainable, and runs locally with SQLite and Flask. No GPU, cloud service, or LLM is required. |
+| Advanced models may require high computing resources | The recommender is deterministic, database-backed, explainable, and runs locally with SQLite and Flask. Live LLM use is optional and limited to quiz generation; a validated offline generator keeps the app usable with no GPU, cloud service, or API key. |
 
 ## Main objective
 
@@ -57,23 +57,24 @@ To improve personalized learning recommendations by considering the student's ac
 
 1. Build a secure learner account and progress dashboard.
 2. Provide a structured Python learning path with Variables, Data Types, Conditionals, Loops, Functions, Lists, and Basic Algorithms.
-3. Provide working quizzes for Variables, Conditionals, Loops, and Functions.
+3. Provide short classic quizzes plus an AI Practice Studio that generates longer fresh question sets on every attempt.
 4. Calculate and display topic-wise mastery from server-scored quiz attempts.
-5. Record quiz history, question responses, and resource completion.
+5. Record quiz history, question responses, skill-level feedback, and resource completion.
 6. Recommend resources with a human-readable explanation and priority score.
 7. Evaluate the adaptive approach against both a content-based baseline and a stable-catalog baseline without inventing results.
+8. Keep AI-generated content private, server-graded, validated, and honest about whether a live LLM or the offline generator produced it.
 
 ## Demonstration flow for a guide review
 
 1. Run `python seed.py` and start the Flask server.
 2. Open `/register` and create a learner account. For a disposable local walkthrough only, the seeded demonstration account in `README.md` can be used; its published password and administrator role are development-only and must not be used for deployment.
 3. Open the dashboard. Show the cold-start state: seven topic rows, unassessed mastery, weak-topic onboarding, resources, and explainable recommendations.
-4. Open the Variables quiz and intentionally submit some incorrect answers. Show server-calculated score, per-question feedback, and the updated Variables mastery.
-5. Return to the dashboard. Show that Variables appears as a weak topic and recommendation explanations mention the low recent score.
-6. Complete a beginner resource in the library. Show the resource completion count and that the recently completed resource is removed from the immediate queue.
-7. Take the Variables quiz again with correct answers. Show the updated quiz history, changed mastery, and changed recommendation ordering/priority.
-8. Open Conditionals, Loops, and Functions from “Practice the foundations” and demonstrate that each is a real quiz with multiple questions.
-9. Open the topic-wise mastery and quiz history tables to explain the learner model.
+4. Open `/practice` and generate a 12-question Variables set. Point out the current mastery signal, the chosen adaptive difficulty, the provider status, and the wizard progress bar.
+5. Intentionally submit some incorrect answers. Show the score ring, skills to review, per-question explanations, exact correct answers, and the updated Variables mastery.
+6. Return to the dashboard. Show that Variables appears as a weak topic, the AI session has a history badge, and recommendation explanations mention the low recent score.
+7. Complete a beginner resource in the library. Show the resource completion count and that the recently completed resource is removed from the immediate queue.
+8. Generate a second Variables set from the dashboard. Show that the prompts are different, recent prompts were skipped, and the quiz is longer than the original quick check. Submit it and compare the mastery and recommendation changes.
+9. Open the original “Classic quick check” to show that the short seeded quiz still works, then open the topic-wise mastery and quiz history tables to explain the learner model.
 10. If required, sign in with a separately created local administrator (or the development-only `demo@example.com` account) and open `/evaluation` to discuss baseline metrics and the limitations of the current evidence.
 
 ## Algorithm in presentation language
@@ -121,8 +122,10 @@ These are rule-based explanations derived from stored records. They are not a cl
 
 | Module | Responsibility |
 | --- | --- |
-| Flask routes | Authentication, dashboard, library, quiz, completion, and evaluation endpoints |
-| SQLAlchemy models | Users, topics, prerequisites, resources, quizzes, questions, attempts, responses, mastery, and interactions |
+| Flask routes | Authentication, dashboard, AI practice studio, quiz generation, library, completion, and evaluation endpoints |
+| SQLAlchemy models | Users, topics, prerequisites, resources, shared/generated quizzes, questions with explanations and skill tags, attempts, responses, mastery, and interactions |
+| AI quiz service | Optional live LLM call, strict JSON/schema validation, adaptive difficulty, recent-prompt avoidance, and offline fallback |
+| Offline question bank | Curated plus parameterized Python code-tracing questions with deterministic answers and teaching explanations |
 | Mastery service | Topic mastery and recent-attempt weighting |
 | Recommender service | Candidate filtering, prerequisite checks, scoring, revision rules, and explanations |
 | Metrics/evaluation services | Progress summary, quiz history, weak topics, multi-scenario offline evaluation, baselines, and Precision@K/Recall@K/NDCG@K helpers |
@@ -136,6 +139,9 @@ These are rule-based explanations derived from stored records. They are not a cl
 - The current recommender is content- and learner-signal-based. It does not use collaborative filtering or claim the results of the base paper.
 - Ranking metrics require held-out relevance labels. The application deliberately reports `null` for Precision@5, Recall@5, and NDCG@5 when such labels are absent.
 - The 65% mastery threshold and 14-day revision window are code constants, not validated psychological thresholds.
+- Live LLM questions are schema-validated but not semantically guaranteed; a production deployment should add instructor review, content moderation, and a curated-question approval queue.
+- The offline generator is a deterministic template engine, not a language model. It is labelled honestly in the UI and supports the seven seeded Python topics.
+- Fresh questions and adaptive difficulty are learning-design improvements, not proof of better learning outcomes.
 - A future learner study should use consent, a pre-test, an intervention, a post-test, and a delayed retention test before making learning-outcome claims.
 
 ## Suggested future work
@@ -144,4 +150,6 @@ These are rule-based explanations derived from stored records. They are not a cl
 2. Add held-out chronological relevance labels for evaluation.
 3. Compare the rule-based method with the included stable and content-based baselines, then add a collaborative baseline only when suitable interaction data is available.
 4. Validate thresholds and revision timing using delayed post-tests rather than clicks alone.
-5. Add instructor tools for editing prerequisites, questions, and resources.
+5. Add instructor tools for reviewing AI-generated questions and editing prerequisites, questions, and resources.
+6. Move from topic-level mastery to skill-level mastery using the stored `Question.skill` values, then validate difficulty calibration with real learner data.
+7. Add rate limiting and cost controls for live AI generation, and replace the small schema helper with Alembic migrations for larger deployments.

@@ -1,8 +1,8 @@
 # Dynamic Learning
 
-Dynamic Learning is a Flask learning-resource recommender. It combines short quizzes, explicit resource completion, topic mastery, prerequisite-aware catalog metadata, and a transparent recommendation queue so a learner can always see a sensible next step.
+Dynamic Learning is a Flask learning-resource recommender. It combines fresh AI-generated practice quizzes, explicit resource completion, topic mastery, prerequisite-aware catalog metadata, and a transparent recommendation queue so a learner can always see a sensible next step.
 
-This repository includes a complete Flask/SQLAlchemy application, responsive learner interface, deterministic recommendation services, seed catalog, and pytest suite.
+This repository includes a complete Flask/SQLAlchemy application, a responsive learner interface, deterministic recommendation services, an optional live-AI quiz provider with a validated offline fallback, a seed catalog, and a pytest suite. The **AI Practice Studio** creates a new private set of 8–20 questions every time; the original short catalog quizzes remain available as classic quick checks.
 
 For a guide-ready project explanation, demonstration script, objectives, base-paper mapping, algorithm summary, limitations, and viva discussion points, see [`PROJECT_GUIDE.md`](PROJECT_GUIDE.md).
 
@@ -30,13 +30,28 @@ $env:ENABLE_DEMO_ACCOUNT = "0"
 
 The application does not automatically load a `.env` file; use your process manager, shell, or a dotenv-aware deployment tool to export those values.
 
+### Optional live AI provider
+
+AI practice works out of the box with a local, validated question generator. To use a real LLM through any OpenAI-compatible Chat Completions endpoint, set:
+
+```bash
+export AI_API_KEY="your-provider-key"
+export AI_API_BASE="https://api.openai.com/v1"   # optional
+export AI_MODEL="gpt-4o-mini"                    # optional
+export AI_TIMEOUT="25"                           # optional, seconds
+export AI_QUIZ_DEFAULT_LENGTH="10"               # optional, 5–20
+export AI_QUIZ_MAX_LENGTH="20"                   # optional, 8–20
+```
+
+The key is read only on the server and never sent to the browser. If the provider is unavailable or returns invalid questions, the app automatically falls back to the offline generator and tells the learner which mode was used. `OPENAI_API_KEY` is also accepted as a fallback variable name. No API key is included in this repository.
+
 Open `http://127.0.0.1:5000/register`. The seed script creates the example catalog; it is safe to run against a fresh development database. Set a strong, random `SECRET_KEY` outside development. For tests:
 
 ```bash
 python -m pytest -q
 ```
 
-The seeded catalog contains seven Python topics, 21 learning resources, seven quizzes, explicit prerequisite links, and meaningful questions for Variables, Conditionals, Loops, and Functions. The default local development seed may create `demo@example.com` with password `password123` for a disposable walkthrough. This is a deliberately known administrator credential for a throwaway local database; it is not suitable for deployment. For deployment, set a long random `SECRET_KEY`, `APP_ENV=production`, and `ENABLE_DEMO_ACCOUNT=0`, then create separately managed accounts. The normal local `python seed.py` flow is otherwise unchanged.
+The seeded catalog still contains seven Python topics, 21 learning resources, seven short classic quizzes, and 25 curated questions. Those short quizzes are retained for the original reproducible audit. Longer, fresh practice comes from `/practice`, which creates a private `Quiz` row per session with 8–20 newly generated, server-validated questions and stores their explanations and skill tags. The default local development seed may create `demo@example.com` with password `password123` for a disposable walkthrough. This is a deliberately known administrator credential for a throwaway local database; it is not suitable for deployment. For deployment, set a long random `SECRET_KEY`, `APP_ENV=production`, and `ENABLE_DEMO_ACCOUNT=0`, then create separately managed accounts. The normal local `python seed.py` flow is otherwise unchanged.
 
 To intentionally reset the local development database and reseed the catalog, run:
 
@@ -54,9 +69,11 @@ The templates keep the existing endpoint names and work with the persisted SQLAl
 | --- | --- | --- |
 | Sign in | `auth.login` GET/POST | form fields `email`, `password` |
 | Register | `auth.register` GET/POST | form fields `name`, `email`, `password` |
-| Overview | `dashboard.dashboard` GET | `user`, `recommendations`, `topics`, `mastery` |
+| Overview | `dashboard.dashboard` GET | `user`, `recommendations`, `topics`, `mastery`, `practice_topics`, `ai_provider` |
+| AI Practice Studio | `learning.practice_studio` GET | `topics` with stored mastery/difficulty signals, `lengths`, `difficulties`, `provider`, `sessions` |
+| Generate AI quiz | `learning.generate_practice` POST | form fields `topic_id`, `length`, `difficulty`; creates one private generated `Quiz` and redirects to its page |
 | Library | `learning.library` GET | `resources`, `topics`; optional `query`, `selected_kind`, `selected_topic`, `completed_resource_ids` |
-| Quiz | `learning.quiz_page` GET | `quiz` with `id`, `title`, `topic`, `questions`; each question has `id`, `prompt`, `options` |
+| Quiz | `learning.quiz_page` GET | `quiz` with `id`, `title`, `topic`, `questions`; each question has `id`, `prompt`, `options`, and optional `skill`/`difficulty`/`explanation` |
 | Evaluation | `evaluation.evaluation_page` GET | `metrics` with observed fields plus `offline` benchmark report |
 
 #### Overview context details
@@ -74,6 +91,18 @@ The templates keep the existing endpoint names and work with the persisted SQLAl
 The dashboard and library use `Resource.url` as an external learning link. `data-quiz` submits `{answers: {question_id: answer}}` to `/api/quizzes/<id>/submit`; quiz feedback can include an `explanation` for each question. All JSON enhancements send the CSRF token emitted by the base template. If form pages are added to the backend, keep the conventional route names above and these templates will continue to work without a rewrite.
 
 After a quiz submission, the response also includes `adaptation` with `previous_score`, `latest_score`, `score_change`, `previous_mastery`, `latest_mastery`, `mastery_change`, snapshots of the previous and next primary recommendations, and `recommendations_changed`. The quiz page renders this comparison without assuming that the queue must change: a stable queue is reported as stable, while changed reasons, priorities, order, or primary resource are treated as adaptation.
+
+## AI practice design
+
+- A generated quiz is a real persisted `Quiz` with `source="generated"`, an `owner_id`, a provider/model label, a random seed, a difficulty mode, and a one-time `completed_at` timestamp.
+- Generated sessions are private. Another signed-in learner receives `404` from the quiz page, quiz API, and submit endpoint.
+- Question answers and explanations are stored only on the server. The HTML page and `/api/quizzes/<id>` return prompts, options, skill, and difficulty, but never the answer or explanation.
+- Adaptive mode uses the existing EMA mastery estimate: below 40% → foundation, 40–69% → core, 70%+ → stretch. The learner can override this with a manual difficulty.
+- Recent prompts from the learner's last attempts on that topic are passed to the generator and skipped, so consecutive sessions vary rather than repeating a memorised set.
+- A live LLM response must contain exactly the requested number of questions, four distinct options each, one exact answer, an explanation, and no repeated/recent prompts. Any network error or validation failure falls back to `app/services/question_bank.py`.
+- The offline generator is transparent: it is a parameterized template engine, **not** a large language model. It produces code-tracing questions with deterministic answers and is available without network access, a GPU, or an API key.
+- Generated quiz attempts flow into the same `QuizAttempt`, `QuestionResponse`, mastery, recommendation, and history services as classic quizzes. No separate learning model is invented.
+- The UI presents long quizzes as a keyboard-friendly wizard with a progress bar, question jump palette, answer review, score ring, skill gaps, per-question explanations, and the next recommended resource. All forms still work as ordinary POST forms without JavaScript.
 
 ## Algorithm
 
@@ -137,7 +166,10 @@ flowchart LR
   Routes --> Services[Domain services]
   Services --> Mastery[Mastery EMA]
   Services --> Recommender[Candidate filter + ranker]
+  Services --> QuizAI[AI quiz orchestration + validation]
   Services --> Metrics[Evaluation metrics]
+  QuizAI --> LiveAI[Optional OpenAI-compatible LLM]
+  QuizAI --> OfflineBank[Local parameterized question bank]
   Routes --> ORM[SQLAlchemy models]
   ORM --> DB[(SQLite / PostgreSQL)]
   Recommender --> Browser
@@ -163,8 +195,8 @@ erDiagram
   USER { int id string email string name boolean is_admin }
   TOPIC { int id string name string description }
   RESOURCE { int id int topic_id string title string url string kind int difficulty int estimated_minutes }
-  QUIZ { int id int topic_id string title }
-  QUESTION { int id int quiz_id string prompt json options string answer }
+  QUIZ { int id int topic_id string title string source int owner_id string generation_provider string generation_mode datetime created_at datetime completed_at }
+  QUESTION { int id int quiz_id string prompt json options string answer string explanation string skill string difficulty }
   QUIZ_ATTEMPT { int id int user_id int quiz_id float score json answers datetime completed_at }
   RESOURCE_COMPLETION { int id int user_id int resource_id datetime completed_at }
   MASTERY_SCORE { int id int user_id int topic_id float score datetime updated_at }
@@ -175,7 +207,7 @@ erDiagram
 
 ## Accessibility and responsive behavior
 
-The UI uses semantic landmarks, skip navigation, visible focus states, labelled form controls, `meter` elements for mastery, live regions for async feedback, keyboard-selectable answer cards, reduced-motion support, and mobile breakpoints down to narrow phone widths. JavaScript enhances completion and quiz submission; the forms remain usable as normal POST forms where the backend provides matching HTML responses.
+The UI uses semantic landmarks, skip navigation, visible focus states, labelled form controls, `meter` elements for mastery, live regions for async feedback, keyboard-selectable answer cards, reduced-motion support, and mobile breakpoints down to narrow phone widths. The long quiz wizard exposes progress and a question palette, warns about skipped answers, and keeps every radio keyboard-selectable. JavaScript enhances completion and quiz submission; the forms remain usable as normal POST forms where the backend provides matching HTML responses.
 
 ## Troubleshooting
 

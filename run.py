@@ -1,7 +1,14 @@
+import os
+
 from app import create_app
 
 app = create_app()
 
 if __name__ == "__main__":
+    # Bind to all interfaces so the app also works in container previews.
     # Debugging must be explicitly enabled through the local Flask CLI.
-    app.run(host="127.0.0.1", debug=False)
+    app.run(
+        host=os.environ.get("HOST", "0.0.0.0"),
+        port=int(os.environ.get("PORT", "5000")),
+        debug=False,
+    )

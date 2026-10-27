@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="A transparent Python learning path shaped by your quiz results and practice.">
+  <meta name="description" content="A transparent Python learning path with fresh AI-powered practice and explainable next steps.">
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>{% block title %}Dynamic Learning{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
@@ -17,6 +17,7 @@
     </a>
     <nav class="topnav" aria-label="Primary navigation">
       <a href="{{ url_for('dashboard.dashboard') }}" {% if request.endpoint in ['dashboard.dashboard', 'dashboard.home'] %}aria-current="page"{% endif %}>Overview</a>
+      <a class="nav-ai" href="{{ url_for('learning.practice_studio') }}" {% if request.endpoint in ['learning.practice_studio', 'learning.generate_practice'] %}aria-current="page"{% endif %}><span aria-hidden="true">✧</span> AI Practice</a>
       <a href="{{ url_for('learning.library') }}" {% if request.endpoint == 'learning.library' %}aria-current="page"{% endif %}>Library</a>
       {% if learner and learner.is_admin %}<a href="{{ url_for('evaluation.evaluation_page') }}" {% if request.endpoint == 'evaluation.evaluation_page' %}aria-current="page"{% endif %}>Evaluation</a>{% endif %}
     </nav>
@@ -35,7 +36,7 @@
     {% endwith %}
     {% block content %}{% endblock %}
   </main>
-  <footer class="site-footer"><span class="footer-brand">dynamic/learn</span><span>A clear next step. A reason behind it.</span><a href="{{ url_for('learning.library') }}">Explore the library →</a></footer>
+  <footer class="site-footer"><span class="footer-brand">dynamic/learn</span><span>Fresh practice. A clear next step. A reason behind it.</span><a href="{{ url_for('learning.practice_studio') }}">Start AI practice →</a></footer>
   <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
   {% block scripts %}{% endblock %}
 </body>
