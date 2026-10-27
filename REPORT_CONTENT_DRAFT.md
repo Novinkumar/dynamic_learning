@@ -1,3 +1,5 @@
+> **Upgrade note:** This document records the original pre-AI audit (7 classic quizzes, 25 curated questions, 167 tests). The application now also has the AI Practice Studio; see [`AI_UPGRADE_NOTES.md`](AI_UPGRADE_NOTES.md) for the exact report/PPT changes and the updated test count (198).
+
 # Dynamic Learning — Personalized Learning-Resource Recommendation System Using Learner Progress and Adaptive Revision
 
 ## Report metadata

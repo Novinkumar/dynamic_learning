@@ -1,1 +1,85 @@
-{% extends 'base.html' %}{% block title %}{{ quiz.title }} · Dynamic Learning{% endblock %}{% block content %}<div class="quiz-shell"><div class="quiz-top"><a href="/dashboard" class="back-link">← Back to overview</a><span class="tag">QUICK CHECK</span></div><section class="quiz-card"><p class="eyebrow">{{ quiz.topic.name|default(quiz.topic)|upper }}</p><h1>{{ quiz.title }}</h1><p class="muted">Answer each question, then get feedback and an updated learning path.</p><form method="post" action="/api/quizzes/{{ quiz.id }}/submit" data-quiz class="answer-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% for question in quiz.questions %}<fieldset class="question-group"><legend><span class="question-number">{{ loop.index }}</span>{{ question.prompt }}</legend>{% for option in question.options %}<label class="answer-option"><input type="radio" name="q_{{ question.id }}" value="{{ option }}" required><span class="answer-letter">{{ 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[loop.index0] }}</span><span>{{ option }}</span></label>{% endfor %}</fieldset>{% endfor %}<div class="quiz-actions"><span class="muted">Every answer helps us adapt.</span><button class="button button-primary" type="submit">Submit answers <span>→</span></button></div><p class="form-feedback" role="status"></p></form><section class="quiz-feedback" hidden tabindex="-1" aria-live="polite"><span class="result-icon">✓</span><p class="eyebrow">CHECK COMPLETE</p><h2 data-score></h2><p data-mastery></p><div data-question-feedback></div><a class="button button-primary" href="/dashboard">See your updated path →</a></section></section><p class="quiz-footer">Mastery is an estimate of understanding, not a grade.</p></div>{% endblock %}
+{% extends 'base.html' %}
+{% block title %}{{ quiz.title }} · Dynamic Learning{% endblock %}
+{% block content %}
+{% set generated = quiz.source == 'generated' %}
+<div class="quiz-shell">
+  <div class="quiz-top">
+    <a href="{{ url_for('dashboard.dashboard') }}" class="back-link">← Back to overview</a>
+    <div class="quiz-badges">
+      {% if generated %}<span class="tag tag-ai">✧ {{ provider_label }}</span>{% else %}<span class="tag">CLASSIC QUICK CHECK</span>{% endif %}
+      <span class="tag tag-neutral">{{ quiz.questions|length }} QUESTION{{ '' if quiz.questions|length == 1 else 'S' }}</span>
+    </div>
+  </div>
+
+  {% if attempt %}
+  <section class="quiz-card completed-card">
+    <div class="result-icon">✓</div>
+    <p class="eyebrow">SESSION ALREADY COMPLETE</p>
+    <h1>Nice work. This set is done.</h1>
+    <p class="result-copy">You scored <strong>{{ (attempt.score * 100)|round|int }}%</strong> on this AI practice session. Each new session uses fresh questions, so generate another set to keep building evidence.</p>
+    <div class="completed-actions"><a class="button button-ai" href="{{ practice_url }}">Generate another fresh quiz ✦</a><a class="button button-secondary" href="{{ url_for('dashboard.dashboard') }}">See your updated path →</a></div>
+  </section>
+  {% else %}
+  <section class="quiz-card quiz-card-ai">
+    <div class="quiz-heading">
+      <div><p class="eyebrow">{{ quiz.topic.name|default(quiz.topic)|upper }}{% if generated %} · {{ quiz.generation_mode|default('core')|title }}{% endif %}</p><h1>{{ quiz.title }}</h1></div>
+      <div class="quiz-mini-stat"><strong>{{ quiz.questions|length }}</strong><span>questions</span></div>
+    </div>
+    <p class="muted quiz-intro">{% if generated %}Work through each question, review anything you skipped, then submit once. This private set will not appear again.{% else %}Answer each question, then get feedback and an updated learning path.{% endif %}</p>
+
+    {% if quiz.questions %}
+    <form method="post" action="{{ url_for('learning.submit_quiz', quiz_id=quiz.id) }}" data-quiz data-quiz-wizard data-next-quiz-url="{{ practice_url }}" data-question-count="{{ quiz.questions|length }}" class="answer-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="quiz-progress" data-quiz-progress hidden>
+        <div class="progress-label"><span data-progress-label>Question 1 of {{ quiz.questions|length }}</span><span data-progress-percent>{{ (100 / quiz.questions|length)|round|int }}%</span></div>
+        <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="{{ quiz.questions|length }}" aria-valuenow="1" aria-label="Quiz progress"><span data-progress-fill style="width: {{ 100 / quiz.questions|length }}%"></span></div>
+      </div>
+      <div class="question-palette" data-question-palette hidden aria-label="Jump to a question">
+        {% for question in quiz.questions %}<button type="button" data-jump-question="{{ loop.index }}" aria-label="Go to question {{ loop.index }}">{{ loop.index }}</button>{% endfor %}
+      </div>
+
+      <div class="question-steps">
+      {% for question in quiz.questions %}
+        <fieldset class="question-group" data-question-step="{{ loop.index }}">
+          <legend><span class="question-number">{{ loop.index }}</span><span class="question-prompt">{{ question.prompt }}</span></legend>
+          <div class="question-tags">{% if question.skill %}<span>{{ question.skill }}</span>{% endif %}<span>{{ question.difficulty|default('core')|title }}</span></div>
+          <div class="answer-options">
+          {% for option in question.options %}
+            <label class="answer-option"><input type="radio" name="q_{{ question.id }}" value="{{ option }}" required><span class="answer-letter">{{ 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[loop.index0] }}</span><span>{{ option }}</span></label>
+          {% endfor %}
+          </div>
+        </fieldset>
+      {% endfor %}
+      </div>
+
+      <div class="wizard-controls" data-wizard-controls hidden>
+        <button class="button button-secondary" type="button" data-wizard-prev>← Previous</button>
+        <span class="wizard-hint" data-wizard-hint>Choose the best answer</span>
+        <button class="button button-primary" type="button" data-wizard-next>Next question →</button>
+        <button class="button button-ai" type="submit" data-wizard-submit hidden>Submit answers ✦</button>
+      </div>
+
+      <div class="quiz-actions"><span class="muted">Every answer helps us adapt.</span><button class="button button-primary" type="submit" data-main-submit>Submit answers <span aria-hidden="true">→</span></button></div>
+      <p class="form-feedback" role="status"></p>
+    </form>
+    {% else %}
+    <div class="empty-state"><span class="empty-icon" aria-hidden="true">?</span><h3>No questions are available in this quiz.</h3><p>Generate a fresh AI practice session instead.</p><a class="button button-ai" href="{{ practice_url }}">Create a fresh quiz ✦</a></div>
+    {% endif %}
+  </section>
+
+  <section class="quiz-feedback" hidden tabindex="-1" aria-live="polite">
+    <div class="result-score-ring" data-score-ring style="--score: 0"><div><strong data-score-percent>0%</strong><small>score</small></div></div>
+    <p class="eyebrow">PRACTICE COMPLETE</p>
+    <h2 data-score></h2>
+    <p data-mastery></p>
+    <div class="focus-skills" data-focus-skills hidden></div>
+    <div class="next-step-card" data-next-resource hidden></div>
+    <div class="adaptation-summary" data-adaptation-summary></div>
+    <div class="feedback-list" data-question-feedback></div>
+    <div class="completed-actions"><a class="button button-ai" data-another-quiz href="{{ practice_url }}">Generate another fresh quiz ✦</a><a class="button button-secondary" href="{{ url_for('dashboard.dashboard') }}">See your updated path →</a></div>
+  </section>
+  {% endif %}
+  <p class="quiz-footer">Mastery is an estimate of understanding, not a grade. {% if generated %}This AI session is one-time: a new set means genuinely new practice.{% endif %}</p>
+</div>
+{% endblock %}

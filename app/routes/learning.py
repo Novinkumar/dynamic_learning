@@ -1,13 +1,31 @@
-from flask import Blueprint, abort, jsonify, request, render_template
+from flask import (
+    Blueprint, abort, current_app, flash, jsonify, make_response, redirect,
+    render_template, request, url_for,
+)
 from sqlalchemy import or_
 from .common import current_user, login_required
 from .. import db
-from ..models import Quiz, QuizAttempt, Question, QuestionResponse, Resource, ResourceCompletion, ResourceInteraction, Topic
+from ..models import (
+    Quiz, QuizAttempt, Question, QuestionResponse, Resource,
+    ResourceCompletion, ResourceInteraction, Topic, utcnow_naive,
+)
 from ..services.catalog import question_explanation
 from ..services.mastery import topic_mastery, update_mastery
+from ..services.metrics import learning_summary
+from ..services.question_bank import resolve_topic
+from ..services.quiz_ai import (
+    choose_difficulty, difficulty_reason, generate_quiz, provider_status,
+)
 from ..services.recommender import recommendation_plan, recommend_resources
 
 learning_bp = Blueprint("learning", __name__)
+
+DIFFICULTY_CHOICES = (
+    ("adaptive", "Adaptive to my mastery"),
+    ("foundation", "Foundation · build confidence"),
+    ("core", "Core · balanced practice"),
+    ("stretch", "Stretch · challenge me"),
+)
 
 
 def _get_or_404(model, object_id):
@@ -17,8 +35,19 @@ def _get_or_404(model, object_id):
     return item
 
 
+def _get_quiz_for_user(quiz_id):
+    """Shared catalog quizzes are public; generated sessions are private."""
+    item = _get_or_404(Quiz, quiz_id)
+    if item.source == "generated" and item.owner_id != current_user().id:
+        abort(404)
+    return item
+
+
 def _recommendation_payload(resource):
-    return {"id": resource.id, "title": resource.title, "topic": resource.topic.name,
+    return {"id": resource.id, "title": resource.title, "url": resource.url,
+            "topic": resource.topic.name, "kind": resource.kind,
+            "difficulty": resource.difficulty,
+            "estimated_minutes": resource.estimated_minutes,
             "priority": resource.priority, "reason": resource.reason,
             "explanation": resource.reason}
 
@@ -27,6 +56,91 @@ def _plan_payload(plan):
     return {"primary": _recommendation_payload(plan["primary"]) if plan["primary"] else None,
             "supporting": [_recommendation_payload(item) for item in plan["supporting"]],
             "all": [_recommendation_payload(item) for item in plan["all"]]}
+
+
+def _provider_label(provider, model=""):
+    if provider == "live_ai":
+        return f"Live AI · {model}" if model else "Live AI"
+    if provider == "offline_fallback":
+        return "Offline AI · fallback"
+    if provider == "offline_generator":
+        return "Offline AI generator"
+    return "Classic quick check"
+
+
+def _length_choices(config):
+    default = config.get("AI_QUIZ_DEFAULT_LENGTH", 10)
+    maximum = config.get("AI_QUIZ_MAX_LENGTH", 20)
+    try:
+        default, maximum = int(default), int(maximum)
+    except (TypeError, ValueError):
+        default, maximum = 10, 20
+    maximum = max(default, min(20, maximum))
+    return sorted({value for value in (8, 10, 12, 15, 20, default, maximum)
+                   if 5 <= value <= maximum})
+
+
+def _practice_topic_stats(user_id, topics):
+    """Assemble only real, stored evidence for the AI practice selector."""
+    summary = learning_summary(user_id)
+    assessed = set(summary["mastery"])
+    latest_scores = {}
+    for item in summary["quiz_history"]:
+        latest_scores.setdefault(item["topic_id"], item["score"])
+    stats = []
+    for topic in topics:
+        mastery = summary["mastery"].get(topic.id, 0.0)
+        stats.append({
+            "id": topic.id,
+            "name": topic.name,
+            "description": topic.description,
+            "mastery": mastery,
+            "assessed": topic.id in assessed,
+            "latest_score": latest_scores.get(topic.id),
+            "suggested_difficulty": choose_difficulty(mastery, "adaptive"),
+            "difficulty_reason": difficulty_reason(mastery, "adaptive", choose_difficulty(mastery, "adaptive")),
+            "offline_supported": resolve_topic(topic.name) is not None,
+        })
+    return stats
+
+
+def _recent_prompts(user_id, topic_id, limit=60):
+    """Recent prompts are excluded so the next session feels genuinely fresh."""
+    attempts = (QuizAttempt.query.join(QuizAttempt.quiz)
+                .filter(QuizAttempt.user_id == user_id, Quiz.topic_id == topic_id)
+                .order_by(QuizAttempt.completed_at.desc(), QuizAttempt.id.desc())
+                .limit(6).all())
+    prompts = []
+    seen = set()
+    for attempt in attempts:
+        for question in attempt.quiz.questions:
+            key = " ".join(question.prompt.lower().split())
+            if key not in seen:
+                seen.add(key)
+                prompts.append(question.prompt)
+    return prompts[:limit]
+
+
+def _recent_sessions(user_id, limit=6):
+    quizzes = (Quiz.query.filter_by(source="generated", owner_id=user_id)
+               .order_by(Quiz.created_at.desc(), Quiz.id.desc()).limit(limit).all())
+    sessions = []
+    for quiz in quizzes:
+        attempt = (QuizAttempt.query.filter_by(user_id=user_id, quiz_id=quiz.id)
+                   .order_by(QuizAttempt.completed_at.desc(), QuizAttempt.id.desc()).first())
+        sessions.append({
+            "id": quiz.id,
+            "title": quiz.title,
+            "topic": quiz.topic.name,
+            "topic_id": quiz.topic_id,
+            "question_count": len(quiz.questions),
+            "mode": quiz.generation_mode or "core",
+            "provider": _provider_label(quiz.generation_provider, quiz.generation_model),
+            "created_at": quiz.created_at,
+            "completed_at": quiz.completed_at,
+            "score": attempt.score if attempt else None,
+        })
+    return sessions
 
 
 @learning_bp.get("/api/resources")
@@ -74,11 +188,108 @@ def library():
                            query=query_text, user=user, completed_resource_ids=completed_resource_ids)
 
 
+@learning_bp.get("/practice")
+@login_required
+def practice_studio():
+    """AI practice studio: choose a topic, length, and difficulty."""
+    user = current_user()
+    topics = _practice_topic_stats(user.id, Topic.query.order_by(Topic.id).all())
+    selected = request.args.get("topic", type=int)
+    valid_ids = {item["id"] for item in topics}
+    if selected not in valid_ids:
+        selected = next((item["id"] for item in topics if item["offline_supported"]), None)
+    lengths = _length_choices(current_app.config)
+    default_length = min(current_app.config.get("AI_QUIZ_DEFAULT_LENGTH", 10), lengths[-1] if lengths else 10)
+    return render_template(
+        "practice.html",
+        topics=topics,
+        selected_topic_id=selected,
+        lengths=lengths,
+        default_length=default_length,
+        difficulties=DIFFICULTY_CHOICES,
+        provider=provider_status(current_app.config),
+        sessions=_recent_sessions(user.id),
+        user=user,
+    )
+
+
+@learning_bp.post("/practice/generate")
+@login_required
+def generate_practice():
+    """Create one fresh, private quiz session and redirect to its page."""
+    user = current_user()
+    topic_id = request.form.get("topic_id", type=int)
+    topic = _get_or_404(Topic, topic_id) if topic_id else None
+    if topic is None:
+        return redirect(url_for("learning.practice_studio"))
+    lengths = _length_choices(current_app.config)
+    requested_length = request.form.get("length", type=int) or current_app.config.get("AI_QUIZ_DEFAULT_LENGTH", 10)
+    length = min(max(requested_length, min(lengths)), max(lengths))
+    difficulty = request.form.get("difficulty", "adaptive").strip()
+    if difficulty not in {key for key, _ in DIFFICULTY_CHOICES}:
+        difficulty = "adaptive"
+    summary = learning_summary(user.id)
+    mastery = summary["mastery"].get(topic.id, 0.0)
+    latest = next((item["score"] for item in summary["quiz_history"]
+                   if item["topic_id"] == topic.id), None)
+    recent_prompts = _recent_prompts(user.id, topic.id)
+    try:
+        result = generate_quiz(
+            current_app.config, topic.name, count=length, difficulty=difficulty,
+            mastery=mastery, recent_score=latest, recent_prompts=recent_prompts,
+        )
+    except ValueError as exc:
+        flash(str(exc) or "Could not generate a quiz for this topic. Choose a Python topic or configure live AI.", "error")
+        return redirect(url_for("learning.practice_studio", topic=topic.id))
+    quiz = Quiz(
+        topic_id=topic.id,
+        title=f"{topic.name} · fresh AI practice",
+        source="generated",
+        owner_id=user.id,
+        generation_provider=result.provider,
+        generation_model=result.model,
+        generation_seed=result.seed,
+        generation_mode=result.effective_difficulty,
+        difficulty=result.requested_difficulty,
+        created_at=utcnow_naive(),
+    )
+    db.session.add(quiz)
+    db.session.flush()
+    for item in result.questions:
+        db.session.add(Question(
+            quiz_id=quiz.id,
+            prompt=item["prompt"],
+            options=list(item["options"]),
+            answer=item["answer"],
+            explanation=item["explanation"],
+            skill=item["skill"],
+            difficulty=item["difficulty"],
+        ))
+    db.session.commit()
+    if result.warning:
+        flash(result.warning, "warning")
+    else:
+        flash(f"{length} fresh questions are ready. {result.label} · {result.effective_difficulty} level.", "success")
+    return redirect(url_for("learning.quiz_page", quiz_id=quiz.id), code=303)
+
+
 @learning_bp.get("/quiz/<int:quiz_id>")
 @login_required
 def quiz_page(quiz_id):
-    item = _get_or_404(Quiz, quiz_id)
-    return render_template("quiz.html", quiz=item)
+    item = _get_quiz_for_user(quiz_id)
+    attempt = None
+    if item.source == "generated" and item.completed_at:
+        attempt = (QuizAttempt.query.filter_by(user_id=current_user().id, quiz_id=item.id)
+                   .order_by(QuizAttempt.completed_at.desc(), QuizAttempt.id.desc()).first())
+    response = make_response(render_template(
+        "quiz.html",
+        quiz=item,
+        attempt=attempt,
+        provider_label=_provider_label(item.generation_provider, item.generation_model),
+        practice_url=url_for("learning.practice_studio", topic=item.topic_id),
+    ))
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @learning_bp.post("/api/resources/<int:resource_id>/complete")
@@ -96,18 +307,30 @@ def complete(resource_id):
 @learning_bp.get("/api/quizzes/<int:quiz_id>")
 @login_required
 def quiz(quiz_id):
-    item = _get_or_404(Quiz, quiz_id)
-    return jsonify(id=item.id, title=item.title, topic=item.topic.name, topic_id=item.topic_id,
-                   questions=[{"id": q.id, "prompt": q.prompt, "options": q.options} for q in item.questions],
-                   resources=[{"id": resource.id, "title": resource.title, "url": resource.url,
-                               "description": resource.description} for resource in item.topic.resources])
+    item = _get_quiz_for_user(quiz_id)
+    response = jsonify(
+        id=item.id, title=item.title, topic=item.topic.name, topic_id=item.topic_id,
+        source=item.source,
+        provider=_provider_label(item.generation_provider, item.generation_model),
+        difficulty=item.generation_mode,
+        question_count=len(item.questions),
+        one_time=item.source == "generated",
+        questions=[{"id": q.id, "prompt": q.prompt, "options": q.options,
+                    "skill": q.skill, "difficulty": q.difficulty} for q in item.questions],
+        resources=[{"id": resource.id, "title": resource.title, "url": resource.url,
+                    "description": resource.description} for resource in item.topic.resources],
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @learning_bp.post("/api/quizzes/<int:quiz_id>/submit")
 @login_required
 def submit_quiz(quiz_id):
-    quiz = _get_or_404(Quiz, quiz_id)
+    quiz = _get_quiz_for_user(quiz_id)
     learner_id = current_user().id
+    if quiz.source == "generated" and quiz.completed_at:
+        return jsonify(error="This AI practice quiz has already been submitted. Generate a fresh quiz."), 409
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         return jsonify(error="request body must be a JSON object"), 400
@@ -145,6 +368,8 @@ def submit_quiz(quiz_id):
         for question, answer, is_correct in graded_answers:
             db.session.add(QuestionResponse(attempt_id=attempt.id, question_id=question.id,
                                             answer=answer, is_correct=is_correct))
+        if quiz.source == "generated":
+            quiz.completed_at = utcnow_naive()
         mastery = update_mastery(learner_id, quiz.topic_id, score, commit=False)
         db.session.commit()
     except Exception:
@@ -155,7 +380,8 @@ def submit_quiz(quiz_id):
         feedback.append({"question_id": question.id, "prompt": question.prompt,
                          "correct": is_correct, "answer": answer,
                          "correct_answer": question.answer,
-                         "explanation": question_explanation(question)})
+                         "explanation": question_explanation(question),
+                         "skill": question.skill, "difficulty": question.difficulty})
     latest_mastery = round(topic_mastery(learner_id, quiz.topic_id), 4)
     next_plan = recommendation_plan(learner_id, support_limit=2)
     next_snapshot = _plan_payload(next_plan)
@@ -178,9 +404,16 @@ def submit_quiz(quiz_id):
         "next_steps": after_ids,
         "recommendations_changed": before_signature != after_signature or before_primary != after_primary,
     }
-    return jsonify(attempt_id=attempt.id, score=score, correct=correct, total=len(quiz.questions), mastery=mastery.score,
-                    feedback=feedback,
-                    recommendations=[_recommendation_payload(item) for item in next_plan["all"]],
-                    primary_recommendation=_recommendation_payload(next_plan["primary"]) if next_plan["primary"] else None,
-                    supporting_recommendations=[_recommendation_payload(item) for item in next_plan["supporting"]],
-                    adaptation=adaptation)
+    response = jsonify(
+        attempt_id=attempt.id, score=score, correct=correct, total=len(quiz.questions),
+        mastery=mastery.score, feedback=feedback,
+        source=quiz.source,
+        provider=_provider_label(quiz.generation_provider, quiz.generation_model),
+        practice_url=url_for("learning.practice_studio", topic=quiz.topic_id),
+        recommendations=[_recommendation_payload(item) for item in next_plan["all"]],
+        primary_recommendation=_recommendation_payload(next_plan["primary"]) if next_plan["primary"] else None,
+        supporting_recommendations=[_recommendation_payload(item) for item in next_plan["supporting"]],
+        adaptation=adaptation,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response

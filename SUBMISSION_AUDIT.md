@@ -1,3 +1,5 @@
+> **Upgrade note:** This document records the original pre-AI audit (7 classic quizzes, 25 curated questions, 167 tests). The application now also has the AI Practice Studio; see [`AI_UPGRADE_NOTES.md`](AI_UPGRADE_NOTES.md) for the exact report/PPT changes and the updated test count (198).
+
 # Submission-readiness audit
 
 **Date:** 12 October 2026, Asia/Kolkata. **Scope:** existing Flask/SQLAlchemy/SQLite project; correctness and reproducibility, no new product features or visual redesign.

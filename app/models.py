@@ -61,8 +61,19 @@ class Quiz(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     topic_id = db.Column(db.Integer, db.ForeignKey("topic.id"), nullable=False, index=True)
     title = db.Column(db.String(200), nullable=False)
+    # "catalog" quizzes are shared and seeded; "generated" quizzes belong to
+    # one learner and represent a single fresh AI practice session.
+    source = db.Column(db.String(30), default="catalog", nullable=False, index=True)
+    owner_id = db.Column(db.Integer, nullable=True, index=True)
+    generation_provider = db.Column(db.String(80))
+    generation_model = db.Column(db.String(120))
+    generation_seed = db.Column(db.String(80))
+    generation_mode = db.Column(db.String(30))
+    difficulty = db.Column(db.String(30))
+    created_at = db.Column(db.DateTime, default=utcnow_naive, nullable=False)
+    completed_at = db.Column(db.DateTime)
     topic = db.relationship("Topic", back_populates="quizzes")
-    questions = db.relationship("Question", back_populates="quiz", cascade="all, delete-orphan")
+    questions = db.relationship("Question", back_populates="quiz", cascade="all, delete-orphan", order_by="Question.id")
 
 
 class Question(db.Model):
@@ -71,6 +82,11 @@ class Question(db.Model):
     prompt = db.Column(db.Text, nullable=False)
     options = db.Column(db.JSON, nullable=False)
     answer = db.Column(db.String(255), nullable=False)
+    # Stored so both generated and curated feedback remain available after the
+    # generating session has ended.
+    explanation = db.Column(db.Text, default="", nullable=False)
+    skill = db.Column(db.String(80), default="", nullable=False)
+    difficulty = db.Column(db.String(20), default="core", nullable=False)
     quiz = db.relationship("Quiz", back_populates="questions")
     responses = db.relationship("QuestionResponse", back_populates="question", cascade="all, delete-orphan")
 
